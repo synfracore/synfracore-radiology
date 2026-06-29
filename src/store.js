@@ -25,6 +25,8 @@ export function createHospital(payload) {
 export function addHospitalAdmin(hospitalId, payload) {
   return request(`/superadmin/hospitals/${hospitalId}/admin`, { method: "POST", body: JSON.stringify(payload) });
 }
+
+export function forgotPassword(username) {
   return request("/auth/forgot-password", { method: "POST", body: JSON.stringify({ username }) });
 }
 
