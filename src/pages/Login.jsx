@@ -14,8 +14,8 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      await login(username.trim(), password);
-      navigate("/dashboard");
+      const result = await login(username.trim(), password);
+      navigate(result.user.role === "superadmin" ? "/superadmin" : "/dashboard");
     } catch (err) {
       setError(err.message);
     } finally {
