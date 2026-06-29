@@ -1,23 +1,13 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { login, registerHospital } from "../store.js";
+import { login } from "../store.js";
 
 export default function Login() {
-  const [mode, setMode] = useState("login"); // login | register
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-
-  // login fields
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-
-  // hospital registration fields
-  const [hospitalName, setHospitalName] = useState("");
-  const [adminFullName, setAdminFullName] = useState("");
-  const [adminUsername, setAdminUsername] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
-  const [signupCode, setSignupCode] = useState("");
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -33,115 +23,35 @@ export default function Login() {
     }
   }
 
-  async function handleRegister(e) {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      await registerHospital({
-        hospitalName: hospitalName.trim(),
-        adminUsername: adminUsername.trim(),
-        adminPassword,
-        adminFullName: adminFullName.trim(),
-        signupCode: signupCode.trim(),
-      });
-      navigate("/dashboard");
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
     <div className="login-wrap">
       <div className="login-card">
-        <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-          <button
-            type="button"
-            className={`btn ${mode === "login" ? "btn-primary" : "btn-outline"}`}
-            style={{ flex: 1, justifyContent: "center" }}
-            onClick={() => setMode("login")}
-          >
-            Login
+        <h2 style={{ marginTop: 0 }}>SynfraCore Login</h2>
+        <p style={{ fontSize: 12, color: "#888", marginTop: -8, marginBottom: 18 }}>
+          For radiologists and hospital admins. Use the username and password
+          given to you. New hospitals are onboarded by the platform admin.
+        </p>
+
+        {error && <p style={{ color: "#d64545", fontSize: 13, marginBottom: 14 }}>{error}</p>}
+
+        <form onSubmit={handleLogin}>
+          <div className="field">
+            <label>Username</label>
+            <input value={username} onChange={(e) => setUsername(e.target.value)} required />
+          </div>
+          <div className="field">
+            <label>Password</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          </div>
+          <button type="submit" className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} disabled={loading}>
+            {loading ? "Logging in..." : "Login"}
           </button>
-          <button
-            type="button"
-            className={`btn ${mode === "register" ? "btn-primary" : "btn-outline"}`}
-            style={{ flex: 1, justifyContent: "center" }}
-            onClick={() => setMode("register")}
-          >
-            New Hospital
-          </button>
-        </div>
+        </form>
 
-        {error && (
-          <p style={{ color: "#d64545", fontSize: 13, marginTop: -8, marginBottom: 14 }}>{error}</p>
-        )}
-
-        {mode === "login" ? (
-          <form onSubmit={handleLogin}>
-            <p style={{ fontSize: 12, color: "#888", marginTop: -4, marginBottom: 18 }}>
-              For radiologists and hospital admins. Use the username and password
-              given to you by your hospital admin.
-            </p>
-            <div className="field">
-              <label>Username</label>
-              <input value={username} onChange={(e) => setUsername(e.target.value)} required />
-            </div>
-            <div className="field">
-              <label>Password</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-            </div>
-            <button type="submit" className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} disabled={loading}>
-              {loading ? "Logging in..." : "Login"}
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleRegister}>
-            <p style={{ fontSize: 12, color: "#888", marginTop: -4, marginBottom: 18 }}>
-              Hospital onboarding is invite-only. You'll need a signup code
-              from the platform admin. The admin account created here can
-              then add radiologist logins.
-            </p>
-            <div className="field">
-              <label>Hospital Signup Code</label>
-              <input
-                value={signupCode}
-                onChange={(e) => setSignupCode(e.target.value)}
-                placeholder="Provided by platform admin"
-                required
-              />
-            </div>
-            <div className="field">
-              <label>Hospital Name</label>
-              <input value={hospitalName} onChange={(e) => setHospitalName(e.target.value)} required />
-            </div>
-            <div className="field">
-              <label>Admin Full Name</label>
-              <input value={adminFullName} onChange={(e) => setAdminFullName(e.target.value)} required />
-            </div>
-            <div className="field">
-              <label>Admin Username</label>
-              <input value={adminUsername} onChange={(e) => setAdminUsername(e.target.value)} required />
-            </div>
-            <div className="field">
-              <label>Admin Password (min 8 characters)</label>
-              <input
-                type="password"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                minLength={8}
-                required
-              />
-            </div>
-            <button type="submit" className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} disabled={loading}>
-              {loading ? "Creating..." : "Create Hospital & Admin Account"}
-            </button>
-          </form>
-        )}
-
-        <p style={{ textAlign: "center", marginTop: 16 }}>
+        <p style={{ textAlign: "center", marginTop: 14, fontSize: 13 }}>
+          <Link to="/forgot-password">Forgot password?</Link>
+        </p>
+        <p style={{ textAlign: "center", marginTop: 10 }}>
           <Link to="/" style={{ fontSize: 12 }}>← Back home</Link>
         </p>
       </div>

@@ -11,6 +11,8 @@ export default function Admin() {
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [securityQuestion, setSecurityQuestion] = useState("");
+  const [securityAnswer, setSecurityAnswer] = useState("");
   const [lastCreated, setLastCreated] = useState(null);
 
   function refresh() {
@@ -28,11 +30,19 @@ export default function Admin() {
     setError("");
     setCreating(true);
     try {
-      await createRadiologist({ username: username.trim(), password, fullName: fullName.trim() });
+      await createRadiologist({
+        username: username.trim(),
+        password,
+        fullName: fullName.trim(),
+        securityQuestion: securityQuestion.trim(),
+        securityAnswer: securityAnswer.trim(),
+      });
       setLastCreated({ username: username.trim(), password });
       setFullName("");
       setUsername("");
       setPassword("");
+      setSecurityQuestion("");
+      setSecurityAnswer("");
       refresh();
     } catch (err) {
       setError(err.message);
@@ -71,6 +81,26 @@ export default function Admin() {
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required />
             </div>
           </div>
+          <div className="grid-3">
+            <div className="field">
+              <label>Security Question</label>
+              <input
+                value={securityQuestion}
+                onChange={(e) => setSecurityQuestion(e.target.value)}
+                placeholder="e.g. What is your father's middle name?"
+                required
+              />
+            </div>
+            <div className="field">
+              <label>Security Answer</label>
+              <input
+                value={securityAnswer}
+                onChange={(e) => setSecurityAnswer(e.target.value)}
+                placeholder="Used to verify password resets"
+                required
+              />
+            </div>
+          </div>
           <button className="btn btn-primary" type="submit" disabled={creating}>
             {creating ? "Creating..." : "+ Create Account"}
           </button>
@@ -78,7 +108,8 @@ export default function Admin() {
 
         {lastCreated && (
           <div style={{ marginTop: 14, background: "#e4f5ea", padding: 12, borderRadius: 8, fontSize: 13 }}>
-            Account created. Share these credentials with the radiologist:
+            Account created. Share these credentials with the radiologist (including
+            the security question/answer, so they can reset their own password later):
             <br />
             <strong>Username:</strong> {lastCreated.username} &nbsp; <strong>Password:</strong> {lastCreated.password}
           </div>

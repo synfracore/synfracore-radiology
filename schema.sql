@@ -9,12 +9,15 @@ CREATE TABLE IF NOT EXISTS hospitals (
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
-  hospital_id TEXT NOT NULL,
+  hospital_id TEXT,
   username TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   salt TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('admin', 'radiologist')),
+  role TEXT NOT NULL CHECK (role IN ('superadmin', 'admin', 'radiologist')),
   full_name TEXT NOT NULL,
+  security_question TEXT,
+  security_answer_hash TEXT,
+  security_answer_salt TEXT,
   created_at INTEGER NOT NULL,
   FOREIGN KEY (hospital_id) REFERENCES hospitals(id)
 );

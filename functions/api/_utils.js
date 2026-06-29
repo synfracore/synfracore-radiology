@@ -108,8 +108,18 @@ export async function requireUser(request, db) {
 
 export async function requireAdmin(request, db) {
   const user = await requireUser(request, db);
-  if (user.role !== "admin") throw new AuthError("Admin access required", 403);
+  if (user.role !== "admin" && user.role !== "superadmin") throw new AuthError("Admin access required", 403);
   return user;
+}
+
+export async function requireSuperAdmin(request, db) {
+  const user = await requireUser(request, db);
+  if (user.role !== "superadmin") throw new AuthError("Super-admin access required", 403);
+  return user;
+}
+
+export function normalizeAnswer(answer) {
+  return (answer || "").trim().toLowerCase();
 }
 
 export class AuthError extends Error {

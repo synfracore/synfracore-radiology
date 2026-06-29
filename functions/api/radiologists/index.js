@@ -1,4 +1,4 @@
-import { json, uuid, hashPassword, requireAdmin, AuthError } from "../_utils.js";
+import { json, uuid, hashPassword, requireAdmin, normalizeAnswer, AuthError } from "../_utils.js";
 
 // GET /api/radiologists — list radiologists in admin's hospital
 export async function onRequestGet({ request, env }) {
@@ -20,10 +20,10 @@ export async function onRequestGet({ request, env }) {
 export async function onRequestPost({ request, env }) {
   try {
     const admin = await requireAdmin(request, env.DB);
-    const { username, password, fullName } = await request.json();
+    const { username, password, fullName, securityQuestion, securityAnswer } = await request.json();
 
-    if (!username || !password || !fullName) {
-      return json({ error: "Username, password, and full name are required." }, 400);
+    if (!username || !password || !fullName || !securityQuestion || !securityAnswer) {
+      return json({ error: "Username, password, full name, and security question are required." }, 400);
     }
     if (password.length < 8) {
       return json({ error: "Password must be at least 8 characters." }, 400);
@@ -37,11 +37,15 @@ export async function onRequestPost({ request, env }) {
     const id = uuid();
     const now = Date.now();
     const { hash, salt } = await hashPassword(password);
+    const { hash: answerHash, salt: answerSalt } = await hashPassword(normalizeAnswer(securityAnswer));
 
     await env.DB.prepare(
-      "INSERT INTO users (id, hospital_id, username, password_hash, salt, role, full_name, created_at) VALUES (?, ?, ?, ?, ?, 'radiologist', ?, ?)"
+      `INSERT INTO users
+        (id, hospital_id, username, password_hash, salt, role, full_name,
+         security_question, security_answer_hash, security_answer_salt, created_at)
+       VALUES (?, ?, ?, ?, ?, 'radiologist', ?, ?, ?, ?, ?)`
     )
-      .bind(id, admin.hospital_id, username, hash, salt, fullName, now)
+      .bind(id, admin.hospital_id, username, hash, salt, fullName, securityQuestion, answerHash, answerSalt, now)
       .run();
 
     return json({ radiologist: { id, username, fullName, createdAt: now } }, 201);

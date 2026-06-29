@@ -34,16 +34,24 @@ export default function Layout({ title, children }) {
         <div className="brand">🩻 SynfraCore</div>
         <div className="brand-sub">AI Radiology Reporting</div>
         <nav>
-          <Link to="/dashboard" className={isActive("/dashboard") ? "active" : ""}>
-            📊 Dashboard
-          </Link>
-          <Link to="/new-report" className={isActive("/new-report") ? "active" : ""}>
-            ➕ New Report
-          </Link>
-          {session?.role === "admin" && (
-            <Link to="/admin" className={isActive("/admin") ? "active" : ""}>
-              👥 Manage Radiologists
+          {session?.role === "superadmin" ? (
+            <Link to="/superadmin" className={isActive("/superadmin") ? "active" : ""}>
+              🏥 Manage Hospitals
             </Link>
+          ) : (
+            <>
+              <Link to="/dashboard" className={isActive("/dashboard") ? "active" : ""}>
+                📊 Dashboard
+              </Link>
+              <Link to="/new-report" className={isActive("/new-report") ? "active" : ""}>
+                ➕ New Report
+              </Link>
+              {session?.role === "admin" && (
+                <Link to="/admin" className={isActive("/admin") ? "active" : ""}>
+                  👥 Manage Radiologists
+                </Link>
+              )}
+            </>
           )}
           <button onClick={handleLogout}>↩ Logout</button>
         </nav>
@@ -61,7 +69,9 @@ export default function Layout({ title, children }) {
             <div className="avatar-circle">{initials(session?.fullName)}</div>
             <div>
               <div className="name">{session?.fullName || "..."}</div>
-              <div className="role">{session?.role === "admin" ? "Hospital Admin" : "Radiologist"}</div>
+              <div className="role">
+                {session?.role === "superadmin" ? "Super Admin" : session?.role === "admin" ? "Hospital Admin" : "Radiologist"}
+              </div>
             </div>
           </div>
         </div>

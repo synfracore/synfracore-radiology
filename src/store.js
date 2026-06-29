@@ -14,10 +14,22 @@ async function request(path, options = {}) {
   return data;
 }
 
-export function registerHospital({ hospitalName, adminUsername, adminPassword, adminFullName, signupCode }) {
-  return request("/auth/register-hospital", {
+export function listHospitals() {
+  return request("/superadmin/hospitals").then((d) => d.hospitals);
+}
+
+export function createHospital(payload) {
+  return request("/superadmin/hospitals", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function forgotPassword(username) {
+  return request("/auth/forgot-password", { method: "POST", body: JSON.stringify({ username }) });
+}
+
+export function resetPassword({ username, securityAnswer, newPassword }) {
+  return request("/auth/reset-password", {
     method: "POST",
-    body: JSON.stringify({ hospitalName, adminUsername, adminPassword, adminFullName, signupCode }),
+    body: JSON.stringify({ username, securityAnswer, newPassword }),
   });
 }
 
@@ -40,10 +52,10 @@ export function listRadiologists() {
   return request("/radiologists").then((d) => d.radiologists);
 }
 
-export function createRadiologist({ username, password, fullName }) {
+export function createRadiologist({ username, password, fullName, securityQuestion, securityAnswer }) {
   return request("/radiologists", {
     method: "POST",
-    body: JSON.stringify({ username, password, fullName }),
+    body: JSON.stringify({ username, password, fullName, securityQuestion, securityAnswer }),
   });
 }
 
