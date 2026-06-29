@@ -14,10 +14,10 @@ async function request(path, options = {}) {
   return data;
 }
 
-export function registerHospital({ hospitalName, adminUsername, adminPassword, adminFullName }) {
+export function registerHospital({ hospitalName, adminUsername, adminPassword, adminFullName, signupCode }) {
   return request("/auth/register-hospital", {
     method: "POST",
-    body: JSON.stringify({ hospitalName, adminUsername, adminPassword, adminFullName }),
+    body: JSON.stringify({ hospitalName, adminUsername, adminPassword, adminFullName, signupCode }),
   });
 }
 

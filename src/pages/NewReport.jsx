@@ -84,7 +84,7 @@ export default function NewReport() {
     <Layout title="New Radiology Report">
       <div className="grid-3">
         <div className="card">
-          <h2>Patient Details</h2>
+          <h2>🧑‍⚕️ Patient Details</h2>
           <div className="field">
             <label>Patient ID</label>
             <input value={patient.id} onChange={(e) => setPatient({ ...patient, id: e.target.value })} />
@@ -108,7 +108,7 @@ export default function NewReport() {
         </div>
 
         <div className="card">
-          <h2>Study Details</h2>
+          <h2>📋 Study Details</h2>
           <div className="field">
             <label>Modality</label>
             <div className="modality-row">
@@ -140,7 +140,7 @@ export default function NewReport() {
         </div>
 
         <div className="card">
-          <h2>Report Settings</h2>
+          <h2>⚙️ Report Settings</h2>
           <div className="field lang-select">
             <label>Dictation Language</label>
             <select value={lang} onChange={(e) => setLang(e.target.value)} disabled={listening}>
@@ -159,7 +159,7 @@ export default function NewReport() {
 
       <div className="grid-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
         <div className="card">
-          <h2>Voice Dictation</h2>
+          <h2>🎙️ Voice Dictation</h2>
           {!isSupported && (
             <p style={{ color: "#d64545", fontSize: 13 }}>
               Speech recognition isn't supported in this browser. Please use Chrome or Edge.
@@ -197,7 +197,16 @@ export default function NewReport() {
         </div>
 
         <div className="card">
-          <h2>AI Generated Report (Draft)</h2>
+          <h2>📝 AI Generated Report (Draft)</h2>
+          <div className="editor-toolbar">
+            <button type="button" title="Undo">↺</button>
+            <button type="button" title="Redo">↻</button>
+            <button type="button" title="Bold"><strong>B</strong></button>
+            <button type="button" title="Italic"><em>I</em></button>
+            <button type="button" title="Underline"><u>U</u></button>
+            <button type="button" title="Bullet list">•≡</button>
+            <button type="button" title="Numbered list">1≡</button>
+          </div>
           <textarea
             className="report-editor"
             value={draft}
@@ -213,9 +222,9 @@ export default function NewReport() {
             </button>
           </div>
           {saveError && <p style={{ color: "#d64545", fontSize: 12, marginTop: 6 }}>{saveError}</p>}
-          <p style={{ fontSize: 11, color: "#999", marginTop: 10 }}>
-            This is an AI-assisted draft. Please review and edit before finalizing.
-          </p>
+          <div className="ai-note">
+            ℹ️ This is an AI-assisted draft. Please review and edit before finalizing.
+          </div>
         </div>
       </div>
     </Layout>

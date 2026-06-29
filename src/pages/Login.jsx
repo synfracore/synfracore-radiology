@@ -17,6 +17,7 @@ export default function Login() {
   const [adminFullName, setAdminFullName] = useState("");
   const [adminUsername, setAdminUsername] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
+  const [signupCode, setSignupCode] = useState("");
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -42,6 +43,7 @@ export default function Login() {
         adminUsername: adminUsername.trim(),
         adminPassword,
         adminFullName: adminFullName.trim(),
+        signupCode: signupCode.trim(),
       });
       navigate("/dashboard");
     } catch (err) {
@@ -98,9 +100,19 @@ export default function Login() {
         ) : (
           <form onSubmit={handleRegister}>
             <p style={{ fontSize: 12, color: "#888", marginTop: -4, marginBottom: 18 }}>
-              Register your hospital and create the one admin account. The admin
-              can then create login credentials for each radiologist.
+              Hospital onboarding is invite-only. You'll need a signup code
+              from the platform admin. The admin account created here can
+              then add radiologist logins.
             </p>
+            <div className="field">
+              <label>Hospital Signup Code</label>
+              <input
+                value={signupCode}
+                onChange={(e) => setSignupCode(e.target.value)}
+                placeholder="Provided by platform admin"
+                required
+              />
+            </div>
             <div className="field">
               <label>Hospital Name</label>
               <input value={hospitalName} onChange={(e) => setHospitalName(e.target.value)} required />

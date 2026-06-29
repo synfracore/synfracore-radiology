@@ -1,11 +1,20 @@
 import { json, uuid, hashPassword, createSession, setSessionCookie } from "../_utils.js";
 
 // POST /api/auth/register-hospital
-// Creates a new hospital + its one admin account. Call this once per hospital.
+// Creates a new hospital + its one admin account.
+// Gated by SIGNUP_SECRET (set as an environment variable / secret in Cloudflare Pages)
+// so random people can't self-register a hospital. You hand this code out yourself
+// to each legitimate hospital when onboarding them.
 export async function onRequestPost({ request, env }) {
   const db = env.DB;
   const body = await request.json();
-  const { hospitalName, adminUsername, adminPassword, adminFullName } = body;
+  const { hospitalName, adminUsername, adminPassword, adminFullName, signupCode } = body;
+
+  if (env.SIGNUP_SECRET) {
+    if (!signupCode || signupCode !== env.SIGNUP_SECRET) {
+      return json({ error: "Invalid signup code. Contact the platform admin to onboard your hospital." }, 403);
+    }
+  }
 
   if (!hospitalName || !adminUsername || !adminPassword || !adminFullName) {
     return json({ error: "All fields are required." }, 400);

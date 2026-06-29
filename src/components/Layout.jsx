@@ -2,6 +2,16 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { logout, getSession } from "../store.js";
 
+function initials(name) {
+  if (!name) return "DR";
+  return name
+    .split(" ")
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
 export default function Layout({ title, children }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -22,32 +32,38 @@ export default function Layout({ title, children }) {
     <div className="app-shell">
       <div className="sidebar">
         <div className="brand">🩻 SynfraCore</div>
+        <div className="brand-sub">AI Radiology Reporting</div>
         <nav>
           <Link to="/dashboard" className={isActive("/dashboard") ? "active" : ""}>
-            Dashboard
+            📊 Dashboard
           </Link>
           <Link to="/new-report" className={isActive("/new-report") ? "active" : ""}>
-            New Report
+            ➕ New Report
           </Link>
           {session?.role === "admin" && (
             <Link to="/admin" className={isActive("/admin") ? "active" : ""}>
-              Manage Radiologists
+              👥 Manage Radiologists
             </Link>
           )}
-          <button onClick={handleLogout}>Logout</button>
+          <button onClick={handleLogout}>↩ Logout</button>
         </nav>
         <div className="footer-note">
-          Logged in as<br />
-          <strong style={{ color: "#fff" }}>{session?.fullName || "..."}</strong>
+          🔒 <strong>Secure & Encrypted</strong>
           <br />
-          {session?.role === "admin" ? "Hospital Admin" : "Radiologist"}
-          <br />
-          AI drafts only — doctor approval required before finalizing.
+          Reports are scoped to your hospital only. AI drafts only — final
+          approval always remains with the radiologist.
         </div>
       </div>
       <div className="main">
         <div className="topbar">
           <h1>{title}</h1>
+          <div className="avatar-pill">
+            <div className="avatar-circle">{initials(session?.fullName)}</div>
+            <div>
+              <div className="name">{session?.fullName || "..."}</div>
+              <div className="role">{session?.role === "admin" ? "Hospital Admin" : "Radiologist"}</div>
+            </div>
+          </div>
         </div>
         {children}
       </div>
