@@ -59,13 +59,28 @@ via `wrangler pages dev` (a separate command — ask if you want this set up).
    - Output directory: `dist`
 5. Deploy, then add the D1 binding as described above, then redeploy once more.
 
+## Migrations
+If you already deployed before these features existed, run the relevant
+migration once against your live database:
+```
+wrangler d1 execute synfracore-db --remote --file=./migrate_v2.sql   # superadmin role + security questions
+wrangler d1 execute synfracore-db --remote --file=./migrate_v3.sql   # digital signature + approval lock
+```
+
 ## How accounts work
-- First visit → **Login page → "New Hospital" tab** → creates the hospital
-  and its one admin account.
-- Admin logs in → **Manage Radiologists** page → creates a username/password
-  for each radiologist, shares it with them directly (shown once on screen).
-- Radiologists log in with those credentials and only see their own
-  hospital's reports.
+- **Super-admin** (you, "synfracore"): logs in → **Manage Hospitals** → onboards
+  each real hospital and creates its one admin account.
+  - To test the radiologist/admin flow yourself, create a "Synfracore Test
+    Hospital" here and log in as that hospital's admin — reports are
+    hospital-scoped by design, so the super-admin account intentionally
+    can't see or create reports directly.
+- **Hospital admin**: logs in → **Manage Radiologists** → creates a
+  username/password (+ security question) for each radiologist, shares it
+  with them directly.
+- **Radiologist**: logs in with those credentials, creates/edits draft
+  reports, uploads a digital signature image to approve. Once approved, a
+  report is locked — no further edits or deletion, by anyone, enforced both
+  in the UI and on the server.
 
 ## Not included yet (future phases)
 - Real AI language model for impression generation (currently a template)
