@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout.jsx";
 import { useSpeechToText } from "../hooks/useSpeechToText.js";
 import { buildReport } from "../reportTemplate.js";
+import { cleanupDuplicateWords } from "../cleanupTranscript.js";
 import { createReport } from "../store.js";
 
 const MODALITIES = ["CT", "MR", "X-RAY", "USG", "PET-CT"];
@@ -46,11 +47,13 @@ export default function NewReport() {
   } = useSpeechToText("en-IN");
 
   function handleGenerate() {
+    // Speech-to-text → duplicate word cleanup → report generator (unchanged)
+    const cleanedText = cleanupDuplicateWords(transcript);
     const report = buildReport({
       modality,
       study,
       clinicalHistory,
-      dictatedText: transcript,
+      dictatedText: cleanedText,
       patient,
     });
     setDraft(report);

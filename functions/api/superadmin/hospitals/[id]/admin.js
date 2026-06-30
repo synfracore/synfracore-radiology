@@ -1,5 +1,4 @@
 import { json, uuid, hashPassword, requireSuperAdmin, normalizeAnswer, AuthError } from "../../../_utils.js";
-//import { json, uuid, hashPassword, requireSuperAdmin, normalizeAnswer, AuthError } from "../_utils.js";
 
 // POST /api/superadmin/hospitals/:id/admin
 // Creates an admin account for a hospital that has none (e.g. orphaned after
