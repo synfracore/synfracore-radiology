@@ -3,13 +3,22 @@ import { useRef, useState, useCallback } from "react";
 // Wraps the browser's native SpeechRecognition (Web Speech API).
 // Free, no API key, supports many languages out of the box.
 // Works in Chrome/Edge. Not supported in Firefox/Safari yet (we show a warning if missing).
-export function useSpeechToText(initialLang = "en-IN") {
+//
+// Pass `onResult({ finalChunk, interimChunk })` to intercept every
+// recognition result yourself (e.g. to check for a voice command before
+// deciding whether to commit it to the transcript). When provided, this hook
+// no longer auto-appends finalChunk to its own `transcript` state — the
+// caller decides, using the returned `setTranscript`. Omit it to keep the
+// previous auto-accumulating behavior.
+export function useSpeechToText(initialLang = "en-IN", { onResult } = {}) {
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [interim, setInterim] = useState("");
   const [error, setError] = useState(null);
   const [lang, setLang] = useState(initialLang);
   const recognitionRef = useRef(null);
+  const onResultRef = useRef(onResult);
+  onResultRef.current = onResult;
 
   const isSupported =
     typeof window !== "undefined" &&
@@ -34,8 +43,14 @@ export function useSpeechToText(initialLang = "en-IN") {
         if (event.results[i].isFinal) finalChunk += text + " ";
         else interimChunk += text;
       }
-      if (finalChunk) setTranscript((prev) => (prev + " " + finalChunk).trim());
       setInterim(interimChunk);
+
+      const handler = onResultRef.current;
+      if (handler) {
+        handler({ finalChunk: finalChunk.trim(), interimChunk });
+      } else if (finalChunk) {
+        setTranscript((prev) => (prev + " " + finalChunk).trim());
+      }
     };
 
     recognition.onerror = (event) => {

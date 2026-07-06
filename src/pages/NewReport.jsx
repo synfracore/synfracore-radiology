@@ -1,12 +1,31 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout.jsx";
 import { useSpeechToText } from "../hooks/useSpeechToText.js";
-import { buildReport } from "../reportTemplate.js";
-import { cleanupDuplicateWords } from "../cleanupTranscript.js";
 import { createReport } from "../store.js";
 
+import { cleanTranscript } from "../pipeline/step1_clean.js";
+import { extractEntities } from "../pipeline/step2_extract.js";
+import { generateReport } from "../pipeline/step4_generate.js";
+import { getSuggestions, parseVoiceCommand } from "../pipeline/step5_suggest.js";
+import { checkContext } from "../rules/context.js";
+import { runAllRules } from "../rules/index.js";
+
+import ValidationAlerts from "../components/ValidationAlerts.jsx";
+import SuggestionChips from "../components/SuggestionChips.jsx";
+import RawTranscriptToggle from "../components/RawTranscriptToggle.jsx";
+
 const MODALITIES = ["CT", "MR", "X-RAY", "USG", "PET-CT"];
+
+const BODY_PARTS_BY_MODALITY = {
+  CT: ["Brain", "Chest", "Abdomen", "Pelvis", "Spine", "Neck", "Extremities"],
+  MR: ["Brain", "Spine", "Abdomen"],
+  "X-RAY": ["Chest", "Extremities"],
+  USG: ["Abdomen", "Pelvis"],
+  "PET-CT": ["Whole Body"],
+};
+
+const CONTRAST_MODALITIES = ["CT", "MR"];
 
 const LANGUAGES = [
   { code: "en-IN", label: "English (India)" },
@@ -25,13 +44,82 @@ const LANGUAGES = [
   { code: "zh-CN", label: "Chinese (Mandarin)" },
 ];
 
+// extractSection(reportText, startLabel, endLabel) -> string
+// Pulls the text between two section labels out of the assembled report
+// string produced by pipeline/step4_generate.js, so Findings/Impression can
+// be fed into rules/index.js's runAllRules separately.
+function extractSection(reportText, startLabel, endLabel) {
+  const startIdx = reportText.indexOf(startLabel);
+  if (startIdx === -1) return "";
+  const contentStart = startIdx + startLabel.length;
+  const endIdx = reportText.indexOf(endLabel, contentStart);
+  const contentEnd = endIdx === -1 ? reportText.length : endIdx;
+  return reportText.slice(contentStart, contentEnd).trim();
+}
+
+function removeLastSentence(text) {
+  const trimmed = text.trim();
+  if (!trimmed) return trimmed;
+  const sentences = trimmed.split(/(?<=[.!?])\s+/).filter(Boolean);
+  sentences.pop();
+  return sentences.join(" ");
+}
+
 export default function NewReport() {
   const navigate = useNavigate();
   const [patient, setPatient] = useState({ id: "", name: "", age: "", gender: "Male" });
   const [modality, setModality] = useState("CT");
-  const [study, setStudy] = useState("");
+  const [bodyPart, setBodyPart] = useState("Brain");
+  const [contrast, setContrast] = useState("NON_CONTRAST");
   const [clinicalHistory, setClinicalHistory] = useState("");
   const [draft, setDraft] = useState("");
+
+  const [cleanedTranscript, setCleanedTranscript] = useState("");
+  const [transcriptChanges, setTranscriptChanges] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [entities, setEntities] = useState(null);
+  const [validation, setValidation] = useState({ errors: [], warnings: [], flags: [] });
+
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  const reportEditorRef = useRef(null);
+  // Holds the latest versions of functions that recognition.onresult needs to
+  // call, so the stable handleSpeechResult callback (passed into the hook
+  // once) always reaches the freshest closures without re-subscribing.
+  const helpersRef = useRef({});
+
+  // Keep bodyPart valid whenever modality changes.
+  useEffect(() => {
+    const options = BODY_PARTS_BY_MODALITY[modality] || [];
+    if (!options.includes(bodyPart)) {
+      setBodyPart(options[0] || "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modality]);
+
+  const handleSpeechResult = useCallback(({ finalChunk, interimChunk }) => {
+    const helpers = helpersRef.current;
+
+    // 2a. Check the interim text for a voice command as it's being spoken.
+    const interimCommand = parseVoiceCommand(interimChunk);
+    if (interimCommand.isCommand) {
+      helpers.executeVoiceCommand(interimCommand.action);
+      return; // 2b. do not add to transcript
+    }
+
+    if (!finalChunk) return; // still mid-utterance, nothing committed yet
+
+    // A command phrase may only be recognizable once it's finalized.
+    const finalCommand = parseVoiceCommand(finalChunk);
+    if (finalCommand.isCommand) {
+      helpers.executeVoiceCommand(finalCommand.action);
+      return;
+    }
+
+    // 2c-2f: not a command — commit it, clean, display, and suggest.
+    helpers.applyTranscriptUpdate((prev) => (prev + " " + finalChunk).trim());
+  }, []);
 
   const {
     listening,
@@ -44,23 +132,124 @@ export default function NewReport() {
     start,
     stop,
     clear,
-  } = useSpeechToText("en-IN");
+    setTranscript,
+  } = useSpeechToText("en-IN", { onResult: handleSpeechResult });
 
-  function handleGenerate() {
-    // Speech-to-text → duplicate word cleanup → report generator (unchanged)
-    const cleanedText = cleanupDuplicateWords(transcript);
-    const report = buildReport({
-      modality,
-      study,
-      clinicalHistory,
-      dictatedText: cleanedText,
-      patient,
-    });
-    setDraft(report);
+  function updateSuggestionsFromText(text) {
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    const lastFive = words.slice(-5).join(" ");
+    setSuggestions(lastFive ? getSuggestions(lastFive) : []);
   }
 
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
+  function applyTranscriptUpdate(updaterFn) {
+    setTranscript((prev) => {
+      const updated = updaterFn(prev);
+      const cleanResult = cleanTranscript(updated);
+      setCleanedTranscript(cleanResult.cleaned);
+      setTranscriptChanges(cleanResult.changes);
+      updateSuggestionsFromText(cleanResult.cleaned);
+      return updated;
+    });
+  }
+
+  function focusImpressionSection() {
+    const el = reportEditorRef.current;
+    if (!el || !draft) return;
+    const startIdx = draft.indexOf("IMPRESSION:");
+    if (startIdx === -1) {
+      el.focus();
+      return;
+    }
+    const afterLabel = startIdx + "IMPRESSION:".length;
+    const endIdx = draft.indexOf("\n\n---", afterLabel);
+    const selectionEnd = endIdx === -1 ? draft.length : endIdx;
+    el.focus();
+    el.setSelectionRange(afterLabel, selectionEnd);
+  }
+
+  function handleClearAll() {
+    clear();
+    setCleanedTranscript("");
+    setTranscriptChanges([]);
+    setSuggestions([]);
+    setDraft("");
+    setEntities(null);
+    setValidation({ errors: [], warnings: [], flags: [] });
+  }
+
+  function executeVoiceCommand(action) {
+    switch (action) {
+      case "INSERT_PARAGRAPH_BREAK":
+        applyTranscriptUpdate((prev) => `${prev}\n\n`);
+        break;
+      case "DELETE_PREVIOUS_SENTENCE":
+        applyTranscriptUpdate((prev) => removeLastSentence(prev));
+        break;
+      case "FOCUS_IMPRESSION":
+        focusImpressionSection();
+        break;
+      case "FINALIZE_REPORT":
+        handleSaveDraft();
+        break;
+      case "CLEAR_ALL":
+        handleClearAll();
+        break;
+      default:
+        break;
+    }
+  }
+
+  // Refresh every render so the stable handleSpeechResult callback always
+  // calls into the current render's closures (current draft, current state).
+  helpersRef.current.executeVoiceCommand = executeVoiceCommand;
+  helpersRef.current.applyTranscriptUpdate = applyTranscriptUpdate;
+
+  function handleSuggestionSelect(suggestion) {
+    applyTranscriptUpdate((prev) => `${prev} ${suggestion}`.trim());
+  }
+
+  const effectiveContrast = CONTRAST_MODALITIES.includes(modality) ? contrast : "STANDARD";
+  const studyLabel = [modality, bodyPart].filter(Boolean).join(" ");
+
+  function handleGenerateDraft() {
+    // 4a
+    const cleanResult = cleanTranscript(transcript);
+    const finalCleaned = cleanResult.cleaned;
+
+    // 4b
+    const extractedEntities = extractEntities(finalCleaned, modality, bodyPart);
+
+    // 4c
+    const contextFlags = checkContext(finalCleaned, modality, bodyPart);
+
+    // 4d
+    const reportText = generateReport({
+      modality,
+      bodyPart,
+      contrast: effectiveContrast,
+      clinicalHistory,
+      cleanedTranscript: finalCleaned,
+      entities: extractedEntities,
+      patient,
+    });
+
+    const findingsSection = extractSection(reportText, "FINDINGS:", "IMPRESSION:");
+    const impressionSection = extractSection(reportText, "IMPRESSION:", "---");
+
+    // 4e
+    const ruleResults = runAllRules(findingsSection, impressionSection, extractedEntities, modality, bodyPart);
+
+    // 4f/4g/4h
+    setCleanedTranscript(finalCleaned);
+    setTranscriptChanges(cleanResult.changes);
+    setEntities(extractedEntities);
+    setDraft(reportText);
+    setValidation({
+      errors: ruleResults.errors,
+      warnings: ruleResults.warnings,
+      flags: [...new Set([...contextFlags, ...ruleResults.flags])],
+    });
+  }
 
   async function handleSaveDraft() {
     setSaving(true);
@@ -69,7 +258,7 @@ export default function NewReport() {
       const result = await createReport({
         patient,
         modality,
-        study,
+        study: studyLabel,
         clinicalHistory,
         dictatedText: transcript,
         draftText: draft || transcript,
@@ -82,6 +271,8 @@ export default function NewReport() {
       setSaving(false);
     }
   }
+
+  const bodyPartOptions = BODY_PARTS_BY_MODALITY[modality] || [];
 
   return (
     <Layout title="New Radiology Report">
@@ -128,9 +319,41 @@ export default function NewReport() {
             </div>
           </div>
           <div className="field">
-            <label>Study</label>
-            <input value={study} onChange={(e) => setStudy(e.target.value)} placeholder="e.g. CT Brain Plain" />
+            <label>Body Part</label>
+            <div className="modality-row">
+              {bodyPartOptions.map((bp) => (
+                <button
+                  key={bp}
+                  className={`modality-btn ${bodyPart === bp ? "active" : ""}`}
+                  onClick={() => setBodyPart(bp)}
+                  type="button"
+                >
+                  {bp}
+                </button>
+              ))}
+            </div>
           </div>
+          {CONTRAST_MODALITIES.includes(modality) && (
+            <div className="field">
+              <label>Contrast</label>
+              <div className="modality-row">
+                <button
+                  className={`modality-btn ${contrast === "NON_CONTRAST" ? "active" : ""}`}
+                  onClick={() => setContrast("NON_CONTRAST")}
+                  type="button"
+                >
+                  Non-Contrast
+                </button>
+                <button
+                  className={`modality-btn ${contrast === "CONTRAST" ? "active" : ""}`}
+                  onClick={() => setContrast("CONTRAST")}
+                  type="button"
+                >
+                  Contrast
+                </button>
+              </div>
+            </div>
+          )}
           <div className="field">
             <label>Clinical History</label>
             <textarea
@@ -183,17 +406,19 @@ export default function NewReport() {
           </div>
           {error && <p style={{ color: "#d64545", fontSize: 13 }}>Error: {error}</p>}
           <div className="transcript-box">
-            {transcript || interim ? (
+            {cleanedTranscript || interim ? (
               <>
-                {transcript}
+                {cleanedTranscript}
                 <span style={{ color: "#999" }}> {interim}</span>
               </>
             ) : (
               <span style={{ color: "#999" }}>Transcript will appear here as you speak...</span>
             )}
           </div>
+          <SuggestionChips suggestions={suggestions} onSelect={handleSuggestionSelect} />
+          <RawTranscriptToggle raw={transcript} changes={transcriptChanges} />
           <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-            <button className="btn btn-outline" onClick={clear} type="button">
+            <button className="btn btn-outline" onClick={handleClearAll} type="button">
               Clear Transcript
             </button>
           </div>
@@ -201,6 +426,7 @@ export default function NewReport() {
 
         <div className="card">
           <h2>📝 AI Generated Report (Draft)</h2>
+          <ValidationAlerts errors={validation.errors} warnings={validation.warnings} flags={validation.flags} />
           <div className="editor-toolbar">
             <button type="button" title="Undo">↺</button>
             <button type="button" title="Redo">↻</button>
@@ -211,13 +437,14 @@ export default function NewReport() {
             <button type="button" title="Numbered list">1≡</button>
           </div>
           <textarea
+            ref={reportEditorRef}
             className="report-editor"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Click 'Generate Draft' to build the report from your dictation, then edit freely here."
           />
           <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className="btn btn-outline" onClick={handleGenerate} type="button">
+            <button className="btn btn-outline" onClick={handleGenerateDraft} type="button">
               🔄 Generate Draft
             </button>
             <button className="btn btn-primary" onClick={handleSaveDraft} type="button" disabled={saving}>
@@ -226,7 +453,7 @@ export default function NewReport() {
           </div>
           {saveError && <p style={{ color: "#d64545", fontSize: 12, marginTop: 6 }}>{saveError}</p>}
           <div className="ai-note">
-            ℹ️ This is an AI-assisted draft. Please review and edit before finalizing.
+            ℹ️ Rule-based draft — no external AI/LLM is used. Please review and edit before finalizing.
           </div>
         </div>
       </div>

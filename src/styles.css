@@ -344,6 +344,94 @@ table.history-table td {
 .badge.warning { background: var(--warning-bg); color: var(--warning); }
 .badge.danger { background: #fbe6e6; color: var(--danger); }
 
+.validation-summary {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--danger);
+  margin-bottom: 10px;
+}
+.validation-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.validation-banner .icon { flex-shrink: 0; }
+.validation-banner .msg { flex: 1; }
+.validation-banner .dismiss {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 0 0 8px;
+  opacity: 0.6;
+}
+.validation-banner .dismiss:hover { opacity: 1; }
+.validation-banner.error { background: #fbe6e6; border: 1px solid var(--danger); color: var(--danger); }
+.validation-banner.warning { background: var(--warning-bg); border: 1px solid var(--warning); color: var(--warning); }
+.validation-banner.flag { background: #eef4ff; border: 1px solid #d7e3fb; color: var(--teal); }
+
+.suggestion-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  animation: fadeIn 0.2s ease-in;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.suggestion-chip {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.suggestion-chip:hover { background: #f0f2f8; border-color: var(--teal); color: var(--teal); }
+
+.transcript-toggle-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  color: var(--teal);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.transcript-toggle-link:hover { text-decoration: underline; }
+.transcript-toggle-panel { margin-top: 10px; }
+.transcript-raw-box {
+  background: #f6f8fc;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: pre-wrap;
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+.transcript-changes { display: flex; flex-wrap: wrap; gap: 6px; }
+.transcript-change-chip {
+  background: #f0f2f8;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .login-wrap, .home-wrap {
   min-height: 100vh;
   display: flex;
