@@ -22,12 +22,20 @@ function capitalizeFirst(text) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-function buildHeader(modality, bodyPart, patient) {
+function buildHeader(modality, bodyPart, patient, hospital) {
   const title = MODALITY_TITLES[String(modality || "").trim().toUpperCase()] || "RADIOLOGY REPORT";
   const p = patient || {};
+  const h = hospital || {};
+
+  const letterheadLines = [];
+  if (h.name) {
+    const contactParts = [h.address, h.phone].filter(Boolean);
+    letterheadLines.push(h.name + (contactParts.length ? ` — ${contactParts.join(", ")}` : ""));
+  }
+
   const studyLine = `Study: ${[modality, bodyPart].filter(Boolean).join(" ")}`;
   const patientLine = `Patient: ${p.name || "-"}  |  Age/Sex: ${p.age || "-"}/${p.gender || "-"}  |  ID: ${p.id || "-"}`;
-  return [title, studyLine, patientLine].join("\n");
+  return [...letterheadLines, title, studyLine, patientLine].join("\n");
 }
 
 // buildEntitySentence(entities) -> string
@@ -96,16 +104,19 @@ function buildImpressionLines(entities) {
 
 // generateReport(params) -> string
 // params: { modality, bodyPart, contrast, clinicalHistory, cleanedTranscript,
-// entities, patient }
+// entities, patient, hospital }
+// hospital (optional): { name, address, phone } — rendered as a letterhead
+// line above the report title so the hospital's identity travels with the
+// permanent record itself, not just the surrounding page chrome.
 // Assembles HEADER -> TECHNIQUE -> FINDINGS -> IMPRESSION -> FOOTER into a
 // single formatted report string.
 export function generateReport(params) {
   const {
     modality, bodyPart, contrast, clinicalHistory,
-    cleanedTranscript, entities, patient,
+    cleanedTranscript, entities, patient, hospital,
   } = params || {};
 
-  const header = buildHeader(modality, bodyPart, patient);
+  const header = buildHeader(modality, bodyPart, patient, hospital);
 
   const technique =
     getTechniqueText(modality, bodyPart, contrast) ||

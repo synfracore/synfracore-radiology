@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Layout from "../components/Layout.jsx";
-import { getReport, updateReport, deleteReport } from "../store.js";
+import { getReport, updateReport, deleteReport, getHospitalInfo } from "../store.js";
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -22,6 +22,7 @@ export default function Report() {
   const [saving, setSaving] = useState(false);
   const [signaturePreview, setSignaturePreview] = useState(null);
   const [signatureFile, setSignatureFile] = useState(null);
+  const [hospital, setHospital] = useState(null);
 
   useEffect(() => {
     getReport(id)
@@ -32,6 +33,12 @@ export default function Report() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    getHospitalInfo()
+      .then(setHospital)
+      .catch(() => setHospital(null));
+  }, []);
 
   async function handleSignatureChange(e) {
     const file = e.target.files?.[0];
@@ -106,6 +113,13 @@ export default function Report() {
   return (
     <Layout title={`Report — ${report.patient_name || "Unnamed"}`}>
       <div className="card">
+        {hospital?.logo_data && (
+          <img
+            src={hospital.logo_data}
+            alt={`${hospital.name || "Hospital"} logo`}
+            style={{ height: 40, marginBottom: 10 }}
+          />
+        )}
         <h2>📄 Report {isApproved && <span className="badge success">Approved &amp; Locked</span>}</h2>
         {error && <p style={{ color: "#d64545", fontSize: 13 }}>{error}</p>}
 

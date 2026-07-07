@@ -1,6 +1,109 @@
 import { useEffect, useState } from "react";
 import Layout from "../components/Layout.jsx";
-import { listRadiologists, createRadiologist, deleteRadiologist } from "../store.js";
+import {
+  listRadiologists,
+  createRadiologist,
+  deleteRadiologist,
+  getHospitalInfo,
+  updateHospitalInfo,
+} from "../store.js";
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function HospitalSettingsCard() {
+  const [hospital, setHospital] = useState(null);
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
+  const [logoPreview, setLogoPreview] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    getHospitalInfo()
+      .then((h) => {
+        setHospital(h);
+        setAddress(h?.address || "");
+        setPhone(h?.phone || "");
+        setLogoPreview(h?.logo_data || null);
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleLogoChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const dataUrl = await fileToDataUrl(file);
+    setLogoPreview(dataUrl);
+  }
+
+  async function handleSave(e) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    setSaved(false);
+    try {
+      const updated = await updateHospitalInfo({ address, phone, logoData: logoPreview });
+      setHospital(updated);
+      setSaved(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2>🏥 Hospital Settings</h2>
+      {error && <p style={{ color: "#d64545", fontSize: 13 }}>{error}</p>}
+      {loading ? (
+        <p style={{ color: "#888" }}>Loading...</p>
+      ) : (
+        <form onSubmit={handleSave}>
+          <div className="grid-3">
+            <div className="field">
+              <label>Hospital Name</label>
+              <input value={hospital?.name || ""} disabled />
+            </div>
+            <div className="field">
+              <label>Address</label>
+              <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="e.g. 12 MG Road, Bengaluru" />
+            </div>
+            <div className="field">
+              <label>Phone</label>
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="e.g. +91 80 1234 5678" />
+            </div>
+          </div>
+          <div className="field">
+            <label>Logo (shown on printed reports)</label>
+            <input type="file" accept="image/*" onChange={handleLogoChange} />
+            {logoPreview && (
+              <img
+                src={logoPreview}
+                alt="Hospital logo preview"
+                style={{ height: 40, marginTop: 10, display: "block" }}
+              />
+            )}
+          </div>
+          <button className="btn btn-primary" type="submit" disabled={saving}>
+            {saving ? "Saving..." : "Save Hospital Settings"}
+          </button>
+          {saved && <span style={{ marginLeft: 10, fontSize: 12, color: "#16a34a" }}>Saved.</span>}
+        </form>
+      )}
+    </div>
+  );
+}
 
 export default function Admin() {
   const [radiologists, setRadiologists] = useState([]);
@@ -63,6 +166,8 @@ export default function Admin() {
 
   return (
     <Layout title="Manage Radiologists">
+      <HospitalSettingsCard />
+
       <div className="card">
         <h2>Add Radiologist</h2>
         {error && <p style={{ color: "#d64545", fontSize: 13 }}>{error}</p>}

@@ -67,6 +67,17 @@ export function deleteRadiologist(id) {
   return request(`/radiologists/${id}`, { method: "DELETE" });
 }
 
+export function getHospitalInfo() {
+  return request("/hospital").then((d) => d.hospital);
+}
+
+export function updateHospitalInfo({ address, phone, logoData }) {
+  return request("/hospital", {
+    method: "PUT",
+    body: JSON.stringify({ address, phone, logoData }),
+  }).then((d) => d.hospital);
+}
+
 export function listReports() {
   return request("/reports").then((d) => d.reports);
 }

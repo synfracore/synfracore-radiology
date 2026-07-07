@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout.jsx";
 import { useSpeechToText } from "../hooks/useSpeechToText.js";
-import { createReport } from "../store.js";
+import { createReport, getHospitalInfo } from "../store.js";
 
 import { cleanTranscript } from "../pipeline/step1_clean.js";
 import { extractEntities } from "../pipeline/step2_extract.js";
@@ -82,6 +82,13 @@ export default function NewReport() {
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [hospital, setHospital] = useState(null);
+
+  useEffect(() => {
+    getHospitalInfo()
+      .then(setHospital)
+      .catch(() => setHospital(null));
+  }, []);
 
   const reportEditorRef = useRef(null);
   // Holds the latest versions of functions that recognition.onresult needs to
@@ -231,6 +238,7 @@ export default function NewReport() {
       cleanedTranscript: finalCleaned,
       entities: extractedEntities,
       patient,
+      hospital,
     });
 
     const findingsSection = extractSection(reportText, "FINDINGS:", "IMPRESSION:");
