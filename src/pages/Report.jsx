@@ -110,12 +110,15 @@ export default function Report() {
         {error && <p style={{ color: "#d64545", fontSize: 13 }}>{error}</p>}
 
         <textarea
-          className="report-editor"
+          className="report-editor no-print"
           value={draftText}
           onChange={(e) => setDraftText(e.target.value)}
           readOnly={isApproved}
           style={isApproved ? { background: "#f6f8fc", color: "#444" } : undefined}
         />
+        {/* Textareas don't reliably render their value when printed, so this
+            plain-text mirror is what actually shows up on the printed page. */}
+        <div className="report-print-view">{draftText}</div>
 
         {isApproved ? (
           <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 16 }}>
