@@ -457,3 +457,19 @@ table.history-table td {
 .home-card h1 { color: var(--navy); margin-bottom: 6px; }
 .home-card p { color: var(--muted); margin-bottom: 28px; }
 .lang-select { margin-bottom: 16px; }
+
+@media print {
+  .sidebar, .topbar, .no-print { display: none !important; }
+  .app-shell { display: block; }
+  .main { padding: 0; max-width: 100%; }
+  .card { box-shadow: none; border: none; padding: 0; margin-bottom: 0; }
+  .report-editor {
+    height: auto !important;
+    min-height: 0;
+    overflow: visible !important;
+    border: none;
+    padding: 0;
+    background: #fff;
+  }
+  body { background: #fff; }
+}

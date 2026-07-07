@@ -134,7 +134,7 @@ export default function Report() {
             </div>
           </div>
         ) : (
-          <div className="field" style={{ marginTop: 18 }}>
+          <div className="field no-print" style={{ marginTop: 18 }}>
             <label>Digital Signature (required to approve — upload an image of your signature)</label>
             <input type="file" accept="image/*" onChange={handleSignatureChange} />
             {signaturePreview && (
@@ -147,7 +147,7 @@ export default function Report() {
           </div>
         )}
 
-        <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="no-print" style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
           {!isApproved && (
             <button className="btn btn-outline" onClick={handleSaveEdits} disabled={saving}>
               💾 Save Edits
