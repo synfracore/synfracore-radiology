@@ -4,12 +4,52 @@
 // block approval, warnings are shown with an override option, flags are
 // informational only. See components/ValidationAlerts.jsx for rendering.
 import { extractEntities } from "./step2_extract.js";
+import { isBilateralOrgan } from "../data/ontology/bilateral_organs.js";
 
 // Organs that should always carry an explicit laterality qualifier.
 const LATERALITY_ORGANS = [
   "kidney", "lung", "adrenal gland", "ovary", "hip", "shoulder", "breast",
   "orbit", "adnexa", "ureter",
 ];
+
+// Adjective/plural forms that should resolve to a canonical
+// LATERALITY_ORGANS entry, so e.g. "renal calculus" is recognized as a
+// "kidney" mention just like step2_extract.js and rules/impression.js do.
+const ORGAN_ALIASES = {
+  renal: "kidney",
+  hepatic: "liver",
+  splenic: "spleen",
+  pulmonary: "lung",
+  pleural: "pleura",
+  cardiac: "heart",
+  cerebral: "brain",
+  vertebral: "spine",
+};
+
+// LATERALITY_SEARCH_TERMS: every literal string that should resolve to a
+// LATERALITY_ORGANS entry when scanning free text (canonical name plus
+// aliases), longest first so multi-word terms aren't shadowed by a shorter
+// substring match.
+const LATERALITY_SEARCH_TERMS = [
+  ...LATERALITY_ORGANS.map((organ) => ({ term: organ, organ })),
+  ...Object.entries(ORGAN_ALIASES)
+    .filter(([, organ]) => LATERALITY_ORGANS.includes(organ))
+    .map(([term, organ]) => ({ term, organ })),
+].sort((a, b) => b.term.length - a.term.length);
+
+// FOCAL_LESION_TERMS: a mention of one of these near an organ describes a
+// single, discrete lesion (as opposed to a whole-organ status like "normal"
+// or "hydronephrosis"). A bilateral organ can still be described
+// separately on each side without contradiction (see BILATERAL_ORGANS),
+// but a focal lesion's side must stay consistent between Findings and
+// Impression regardless of whether the organ itself is bilateral — e.g. a
+// "right renal calculus" in Findings still contradicts a "left renal
+// calculus" Impression.
+const FOCAL_LESION_TERMS = [
+  "calculus", "stone", "mass", "cyst", "nodule", "tumor", "lesion",
+  "fracture", "dislocation",
+];
+const FOCAL_LESION_RE = new RegExp(`\\b(${FOCAL_LESION_TERMS.join("|")})\\b`, "i");
 
 // Maps an organ to the body region it is normally studied in, used by
 // Rule 5 to flag anatomy that doesn't belong to the selected study type.
@@ -57,17 +97,24 @@ function splitSentences(text) {
   return text.split(/(?<=[.!?])\s+/).filter((s) => s.trim().length > 0);
 }
 
-// extractOrganSidePairs(text) -> { organ: string, side: string }[]
-// Within each sentence, pairs every laterality-sensitive organ mention with
-// the nearest right/left/bilateral mention in that same sentence.
+// extractOrganSidePairs(text) -> { organ, side, hasFocalLesion }[]
+// Within each sentence, pairs every laterality-sensitive organ mention
+// (canonical name or alias, e.g. "renal" -> "kidney") with the nearest
+// right/left/bilateral mention in that same sentence. "both" is treated as
+// a synonym for "bilateral" (e.g. "both kidneys normal"). Each pair also
+// records whether the sentence mentions a focal lesion term (calculus,
+// mass, etc.), since that determines whether a bilateral organ still
+// requires strict left/right consistency (see FOCAL_LESION_TERMS).
 function extractOrganSidePairs(text) {
   const pairs = [];
   for (const sentence of splitSentences(text)) {
-    const sideMatches = [...sentence.matchAll(/\b(right|left|bilateral)\b/gi)];
+    const sideMatches = [...sentence.matchAll(/\b(right|left|bilateral|both)\b/gi)];
     if (sideMatches.length === 0) continue;
 
-    for (const organ of LATERALITY_ORGANS) {
-      const organRe = new RegExp(`\\b${escapeRegExp(organ)}\\b`, "i");
+    const hasFocalLesion = FOCAL_LESION_RE.test(sentence);
+
+    for (const { term, organ } of LATERALITY_SEARCH_TERMS) {
+      const organRe = new RegExp(`\\b${escapeRegExp(term)}\\b`, "i");
       const organMatch = organRe.exec(sentence);
       if (!organMatch) continue;
 
@@ -75,10 +122,11 @@ function extractOrganSidePairs(text) {
       for (const sm of sideMatches) {
         const dist = Math.abs(sm.index - organMatch.index);
         if (best === null || dist < best.dist) {
-          best = { side: sm[1].toLowerCase(), dist };
+          const rawSide = sm[1].toLowerCase();
+          best = { side: rawSide === "both" ? "bilateral" : rawSide, dist };
         }
       }
-      if (best) pairs.push({ organ, side: best.side });
+      if (best) pairs.push({ organ, side: best.side, hasFocalLesion });
     }
   }
   return pairs;
@@ -102,12 +150,22 @@ export function validateReport(findings, impression, entities, modality, bodyPar
   }
 
   // Rule 2 (ERROR): Laterality mismatch between Findings and Impression.
+  // A bilateral organ (kidneys, lungs, etc.) described with different sides
+  // in Findings vs Impression is NOT a contradiction on its own — it's
+  // normal to report "left kidney normal... right kidney shows
+  // hydronephrosis". Only flag when either side involves a focal lesion
+  // (calculus, mass, fracture, ...), since a single lesion's side must stay
+  // consistent regardless of whether its organ is bilateral.
   const findingsPairs = extractOrganSidePairs(findingsText);
   const impressionPairs = extractOrganSidePairs(impressionText);
   for (const fp of findingsPairs) {
     for (const ip of impressionPairs) {
       const bothSpecific = fp.side !== "bilateral" && ip.side !== "bilateral";
       if (fp.organ === ip.organ && fp.side !== ip.side && bothSpecific) {
+        const isNormalBilateralReporting =
+          isBilateralOrgan(fp.organ) && !fp.hasFocalLesion && !ip.hasFocalLesion;
+        if (isNormalBilateralReporting) continue;
+
         errors.push(
           `Laterality mismatch: Findings states "${fp.side} ${fp.organ}" but Impression states "${ip.side} ${ip.organ}".`
         );
@@ -116,12 +174,18 @@ export function validateReport(findings, impression, entities, modality, bodyPar
   }
 
   // Rule 3 (WARNING): Laterality-sensitive organ mentioned without a side.
-  for (const organ of LATERALITY_ORGANS) {
-    const organRe = new RegExp(`\\b${escapeRegExp(organ)}\\b`, "i");
+  // "both kidneys" / "bilateral pleural effusion" count as a specified
+  // laterality (normalized to "bilateral" in extractOrganSidePairs), so
+  // they are not flagged here.
+  const flaggedOrgans = new Set();
+  for (const { term, organ } of LATERALITY_SEARCH_TERMS) {
+    if (flaggedOrgans.has(organ)) continue;
+    const organRe = new RegExp(`\\b${escapeRegExp(term)}\\b`, "i");
     if (organRe.test(findingsText)) {
       const hasSide = findingsPairs.some((p) => p.organ === organ);
       if (!hasSide) {
-        warnings.push(`"${organ}" mentioned in Findings without laterality (right/left/bilateral).`);
+        warnings.push(`Laterality missing — specify left or right ${organ}.`);
+        flaggedOrgans.add(organ);
       }
     }
   }

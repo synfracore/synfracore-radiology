@@ -3,6 +3,21 @@
 // Impression mentions that organ at all. Consumed by
 // pipeline/step3_validate.js (via rules/index.js).
 import { ORGAN_FINDINGS } from "../data/ontology/organ_findings.js";
+import { isBilateralOrgan } from "../data/ontology/bilateral_organs.js";
+
+// A mention of one of these near an organ describes a single, discrete
+// lesion (as opposed to a whole-organ status like "normal" or
+// "hydronephrosis"). A bilateral organ (kidney, lung, ...) can legitimately
+// be described with a different side in Findings vs Impression when no
+// focal lesion is involved (e.g. "left kidney normal" / "right kidney
+// hydronephrosis" is standard bilateral reporting, not a contradiction) —
+// but a focal lesion's side must still match, since a lesion like a
+// calculus is a single, specific finding.
+const FOCAL_LESION_TERMS = [
+  "calculus", "stone", "mass", "cyst", "nodule", "tumor", "lesion",
+  "fracture", "dislocation",
+];
+const FOCAL_LESION_RE = new RegExp(`\\b(${FOCAL_LESION_TERMS.join("|")})\\b`, "i");
 
 // Adjective forms that should resolve to the same canonical organ as
 // step2_extract.js's ORGAN_ALIASES, so "right renal calculus" and "left
@@ -38,8 +53,10 @@ function splitSentences(text) {
 function extractOrganSidePairs(text) {
   const pairs = [];
   for (const sentence of splitSentences(text)) {
-    const sideMatches = [...sentence.matchAll(/\b(right|left|bilateral)\b/gi)];
+    const sideMatches = [...sentence.matchAll(/\b(right|left|bilateral|both)\b/gi)];
     if (sideMatches.length === 0) continue;
+
+    const hasFocalLesion = FOCAL_LESION_RE.test(sentence);
 
     for (const { term, organ } of SEARCH_TERMS) {
       const organRe = new RegExp(`\\b${escapeRegExp(term)}\\b`, "i");
@@ -50,10 +67,11 @@ function extractOrganSidePairs(text) {
       for (const sm of sideMatches) {
         const dist = Math.abs(sm.index - organMatch.index);
         if (best === null || dist < best.dist) {
-          best = { side: sm[1].toLowerCase(), dist };
+          const rawSide = sm[1].toLowerCase();
+          best = { side: rawSide === "both" ? "bilateral" : rawSide, dist };
         }
       }
-      if (best) pairs.push({ organ, side: best.side });
+      if (best) pairs.push({ organ, side: best.side, hasFocalLesion });
     }
   }
   return pairs;
@@ -75,9 +93,19 @@ export function checkImpression(findingsText, impressionText) {
     const sideConfirmed = impressionMatches.some(
       (ip) => ip.side === fp.side || ip.side === "bilateral" || fp.side === "bilateral"
     );
-    if (!sideConfirmed) {
-      flags.add(`Findings states "${fp.side} ${fp.organ}" but Impression does not confirm the same side.`);
-    }
+    if (sideConfirmed) continue;
+
+    // Bilateral organs (kidney, lung, ...) are normally reported with each
+    // side described independently, so a side mismatch alone is not a
+    // contradiction — unless a focal lesion (calculus, mass, ...) is
+    // involved, whose laterality must stay consistent regardless.
+    const isNormalBilateralReporting =
+      isBilateralOrgan(fp.organ) &&
+      !fp.hasFocalLesion &&
+      !impressionMatches.some((ip) => ip.hasFocalLesion);
+    if (isNormalBilateralReporting) continue;
+
+    flags.add(`Findings states "${fp.side} ${fp.organ}" but Impression does not confirm the same side.`);
   }
 
   return [...flags];

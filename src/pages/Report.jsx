@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Layout from "../components/Layout.jsx";
-import { getReport, updateReport, deleteReport, getHospitalInfo } from "../store.js";
+import { getReport, updateReport, deleteReport, getHospitalInfo, learnFromApprovedReport } from "../store.js";
+import { learnFromReport } from "../pipeline/patternLearner.js";
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -57,6 +58,22 @@ export default function Report() {
     setError("");
     try {
       await updateReport(id, { draftText, status: "Approved", signatureData: signaturePreview });
+
+      // Fire-and-forget: teach the phrase learner from this now-trusted
+      // (approved) report. Never blocks navigation or surfaces errors to
+      // the radiologist — it's a background improvement, not part of the
+      // approval flow itself.
+      try {
+        const modality = report.modality || "";
+        // "study" is stored as "<modality> <bodyPart>" (see NewReport.jsx);
+        // there's no separate body_part column, so derive it here.
+        const bodyPart = (report.study || "").replace(modality, "").trim();
+        const { sections } = learnFromReport(draftText, modality, bodyPart);
+        learnFromApprovedReport({ modality, bodyPart, sections }).catch(() => {});
+      } catch {
+        // Parsing/learning failure should never block approval.
+      }
+
       navigate("/dashboard");
     } catch (e) {
       setError(e.message);

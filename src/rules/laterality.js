@@ -2,6 +2,17 @@
 // qualifier. Flags an entity when a laterality-sensitive organ is mentioned
 // but no side was specified. Consumed by pipeline/step3_validate.js (via
 // rules/index.js).
+//
+// Note: several of these organs (kidney, lung, adrenal gland, ovary, hip,
+// shoulder, breast, orbit, adnexa, ureter) are also BILATERAL_ORGANS (see
+// data/ontology/bilateral_organs.js) — normally described on both sides in
+// the same report. That does not exempt them from this check: a *focal*
+// finding on one of these organs (e.g. "renal mass", "hip fracture",
+// "breast lesion", "ovarian cyst", "shoulder dislocation") still must state
+// which side it's on. Generic laterality specifications like "both kidneys
+// normal" or "bilateral pleural effusion" satisfy the requirement and are
+// not flagged (see the "bilateral"/"both" handling in
+// pipeline/step3_validate.js's extractOrganSidePairs).
 
 // LATERALITY_REQUIRED: string[]
 // Organ names (matching the canonical keys used by

@@ -97,3 +97,17 @@ export function updateReport(id, payload) {
 export function deleteReport(id) {
   return request(`/reports/${id}`, { method: "DELETE" });
 }
+
+// learnFromApprovedReport({ modality, bodyPart, sections }) — fire-and-forget
+// call made right after a report is approved, so the D1-backed phrase
+// learner (functions/api/patterns/index.js) can improve its suggestions
+// over time.
+export function learnFromApprovedReport(payload) {
+  return request("/patterns/learn", { method: "POST", body: JSON.stringify(payload) });
+}
+
+// getPhraseSuggestions(modality, bodyPart, section, partial) -> Promise<{phrase, count}[]>
+export function getPhraseSuggestions(modality, bodyPart, section, partial) {
+  const params = new URLSearchParams({ modality, bodyPart, section, partial });
+  return request(`/patterns/suggest?${params.toString()}`).then((d) => d.suggestions);
+}

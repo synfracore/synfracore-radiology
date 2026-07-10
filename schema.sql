@@ -55,6 +55,18 @@ CREATE TABLE IF NOT EXISTS reports (
   FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS learned_phrases (
+  id TEXT PRIMARY KEY,
+  modality TEXT NOT NULL,
+  body_part TEXT NOT NULL,
+  section TEXT NOT NULL,
+  phrase TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 1,
+  updated_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_phrase_unique
+  ON learned_phrases(modality, body_part, section, phrase);
+
 CREATE INDEX IF NOT EXISTS idx_users_hospital ON users(hospital_id);
 CREATE INDEX IF NOT EXISTS idx_reports_hospital ON reports(hospital_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
