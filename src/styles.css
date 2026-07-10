@@ -397,6 +397,22 @@ table.history-table td {
   color: var(--text);
 }
 .suggestion-chip:hover { background: #f0f2f8; border-color: var(--teal); color: var(--teal); }
+.suggestion-chip-learned {
+  background: #eef4ff;
+  border-color: var(--teal-light);
+  color: var(--teal);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.suggestion-chip-learned:hover { background: #dfeaff; }
+.suggestion-chip-learned .suggestion-chip-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--teal-light);
+}
 
 .transcript-toggle-link {
   background: none;

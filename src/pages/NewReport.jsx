@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout.jsx";
 import { useSpeechToText } from "../hooks/useSpeechToText.js";
-import { createReport, getHospitalInfo } from "../store.js";
+import { createReport, getHospitalInfo, getPhraseSuggestions } from "../store.js";
 
 import { cleanTranscript } from "../pipeline/step1_clean.js";
 import { extractEntities } from "../pipeline/step2_extract.js";
 import { generateReport } from "../pipeline/step4_generate.js";
 import { getSuggestions, parseVoiceCommand } from "../pipeline/step5_suggest.js";
+import { runLiveAssist } from "../pipeline/typingAssistant.js";
 import { checkContext } from "../rules/context.js";
 import { runAllRules } from "../rules/index.js";
 
@@ -26,6 +27,15 @@ const BODY_PARTS_BY_MODALITY = {
 };
 
 const CONTRAST_MODALITIES = ["CT", "MR"];
+
+// SHADOW_MODE: when true, the pattern learner / typing assistant still run
+// and log their outputs to the console, but their suggestions are never
+// surfaced to the doctor. Lets us validate suggestion quality against real
+// dictation sessions (recommended: 20-30) before trusting it live.
+// Approval-time learning (learnFromApprovedReport, see Report.jsx) is
+// unaffected either way — shadow mode only gates what's *shown*, not what's
+// *learned*.
+const SHADOW_MODE = import.meta.env.VITE_SHADOW_MODE === "true";
 
 const LANGUAGES = [
   { code: "en-IN", label: "English (India)" },
@@ -77,6 +87,7 @@ export default function NewReport() {
   const [cleanedTranscript, setCleanedTranscript] = useState("");
   const [transcriptChanges, setTranscriptChanges] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
+  const [learnedSuggestion, setLearnedSuggestion] = useState(null);
   const [entities, setEntities] = useState(null);
   const [validation, setValidation] = useState({ errors: [], warnings: [], flags: [] });
 
@@ -125,7 +136,8 @@ export default function NewReport() {
     }
 
     // 2c-2f: not a command — commit it, clean, display, and suggest.
-    helpers.applyTranscriptUpdate((prev) => (prev + " " + finalChunk).trim());
+    const cleanedText = helpers.applyTranscriptUpdate((prev) => (prev + " " + finalChunk).trim());
+    helpers.fetchLiveAssist(cleanedText);
   }, []);
 
   const {
@@ -148,15 +160,60 @@ export default function NewReport() {
     setSuggestions(lastFive ? getSuggestions(lastFive) : []);
   }
 
+  // applyTranscriptUpdate(updaterFn) -> string
+  // Applies updaterFn to the current transcript, re-cleans it, and pushes
+  // all the resulting state updates. Returns the freshly-cleaned text
+  // synchronously so callers (e.g. handleSpeechResult) can chain further
+  // work — such as fetching a live-assist suggestion — off the same value,
+  // without waiting on React's async state update.
   function applyTranscriptUpdate(updaterFn) {
-    setTranscript((prev) => {
-      const updated = updaterFn(prev);
-      const cleanResult = cleanTranscript(updated);
-      setCleanedTranscript(cleanResult.cleaned);
-      setTranscriptChanges(cleanResult.changes);
-      updateSuggestionsFromText(cleanResult.cleaned);
-      return updated;
-    });
+    const updated = updaterFn(transcript);
+    const cleanResult = cleanTranscript(updated);
+    setTranscript(updated);
+    setCleanedTranscript(cleanResult.cleaned);
+    setTranscriptChanges(cleanResult.changes);
+    updateSuggestionsFromText(cleanResult.cleaned);
+    return cleanResult.cleaned;
+  }
+
+  // fetchLiveAssist(cleanedText) — fire-and-forget: fetches learned-phrase
+  // suggestions for the "findings" section from D1 (via
+  // getPhraseSuggestions), then runs them through runLiveAssist alongside
+  // the negation/laterality consistency checks. Silently no-ops on network
+  // failure — this is a background nicety, never blocking dictation.
+  async function fetchLiveAssist(cleanedText) {
+    const words = (cleanedText || "").trim().split(/\s+/).filter(Boolean);
+    const lastFewWords = words.slice(-6).join(" ");
+    if (!lastFewWords) {
+      setLearnedSuggestion(null);
+      return;
+    }
+
+    try {
+      const learnedPhrases = await getPhraseSuggestions(modality, bodyPart, "findings", lastFewWords);
+      const { suggestion, confidence, flags } = runLiveAssist(
+        lastFewWords,
+        cleanedText,
+        "findings",
+        learnedPhrases
+      );
+
+      if (SHADOW_MODE) {
+        // Shadow mode: the pipeline still runs in full, but nothing is
+        // surfaced to the doctor — only logged, so we can validate
+        // suggestion quality against real sessions before going live.
+        console.log(`[SHADOW] suggestion: ${suggestion}, confidence: ${confidence}`);
+        console.log(`[SHADOW] flags: ${JSON.stringify(flags)}`);
+        return;
+      }
+
+      setLearnedSuggestion(confidence > 0.4 ? suggestion : null);
+      if (flags.length > 0) {
+        setValidation((v) => ({ ...v, flags: [...new Set([...v.flags, ...flags])] }));
+      }
+    } catch {
+      setLearnedSuggestion(null);
+    }
   }
 
   function focusImpressionSection() {
@@ -179,6 +236,7 @@ export default function NewReport() {
     setCleanedTranscript("");
     setTranscriptChanges([]);
     setSuggestions([]);
+    setLearnedSuggestion(null);
     setDraft("");
     setEntities(null);
     setValidation({ errors: [], warnings: [], flags: [] });
@@ -210,9 +268,11 @@ export default function NewReport() {
   // calls into the current render's closures (current draft, current state).
   helpersRef.current.executeVoiceCommand = executeVoiceCommand;
   helpersRef.current.applyTranscriptUpdate = applyTranscriptUpdate;
+  helpersRef.current.fetchLiveAssist = fetchLiveAssist;
 
   function handleSuggestionSelect(suggestion) {
     applyTranscriptUpdate((prev) => `${prev} ${suggestion}`.trim());
+    setLearnedSuggestion(null);
   }
 
   const effectiveContrast = CONTRAST_MODALITIES.includes(modality) ? contrast : "STANDARD";
@@ -423,7 +483,13 @@ export default function NewReport() {
               <span style={{ color: "#999" }}>Transcript will appear here as you speak...</span>
             )}
           </div>
-          <SuggestionChips suggestions={suggestions} onSelect={handleSuggestionSelect} />
+          {!SHADOW_MODE && (
+            <SuggestionChips
+              suggestions={suggestions}
+              learnedSuggestion={learnedSuggestion}
+              onSelect={handleSuggestionSelect}
+            />
+          )}
           <RawTranscriptToggle raw={transcript} changes={transcriptChanges} />
           <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
             <button className="btn btn-outline" onClick={handleClearAll} type="button">

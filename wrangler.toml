@@ -5,3 +5,8 @@ pages_build_output_dir = "dist"
 binding = "DB"
 database_name = "synfracore-db"
 database_id = "a27df13c-4896-487f-8807-47f6ed869315"
+
+[vars]
+# Set SHADOW_MODE=true to run pattern learning silently (no suggestions
+# shown to doctors) during initial validation period.
+SHADOW_MODE = "false"
